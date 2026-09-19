@@ -1,0 +1,60 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "confirm": {
+        "description": "Add {name}?\n\nThis integration only reads the collar's status (bark, howl and whine counts, battery, mode and settings). It never sends a command to the collar."
+      },
+      "user": {
+        "data": {
+          "address": "Collar"
+        },
+        "description": "Choose a Dogtra SMART NOBARK collar. Only collars currently in range of a Bluetooth adapter or proxy are listed. If the Dogtra phone app is open, the collar is connected to the phone and will not appear -- close the app first."
+      }
+    },
+    "abort": {
+      "already_configured": "This collar is already configured.",
+      "no_devices_found": "No Dogtra collar found. Make sure it is switched on, in range of a Bluetooth adapter or proxy, and that the Dogtra phone app is closed.",
+      "not_supported": "This device is not a Dogtra SMART NOBARK collar."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "bark_count": {
+        "name": "Barks"
+      },
+      "howl_count": {
+        "name": "Howls"
+      },
+      "whine_count": {
+        "name": "Whines"
+      },
+      "whine_and_howl_count": {
+        "name": "Whines and howls"
+      },
+      "mode": {
+        "name": "Correction mode",
+        "state": {
+          "manual": "Manual",
+          "pager": "Pager",
+          "count_only": "Count only"
+        }
+      },
+      "correction_level": {
+        "name": "Correction level"
+      },
+      "sound_sensitivity": {
+        "name": "Sound sensitivity"
+      },
+      "vibration_sensitivity": {
+        "name": "Vibration sensitivity"
+      },
+      "uptime": {
+        "name": "Uptime"
+      },
+      "status_frame": {
+        "name": "Status frame"
+      }
+    }
+  }
+}
