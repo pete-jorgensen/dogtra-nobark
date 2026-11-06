@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -13,15 +14,20 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.components.bluetooth.passive_update_coordinator import (
     PassiveBluetoothCoordinatorEntity,
 )
 
 from . import CollarConfigEntry
-from .const import DOMAIN, MANUFACTURER, MODEL
-from .coordinator import CollarCoordinator
+from .coordinator import (
+    CONNECT_FAILED,
+    CONNECT_OK,
+    CONNECT_SKIPPED,
+    CollarCoordinator,
+    PollDiagnostics,
+)
+from .entity import CollarDiagnosticEntity, collar_device_info
 from .protocol import MODES, CollarState
 
 
@@ -73,6 +79,23 @@ SENSORS: tuple[CollarSensorDescription, ...] = (
         icon="mdi:flash", state_class=SensorStateClass.MEASUREMENT,
         value=lambda s: s.correction_level,
     ),
+    # Auto Increase: the level it is at now and the range it climbs within, as the app's
+    # 1..10 levels (the collar stores raw intensities; protocol.level_from_intensity).
+    CollarSensorDescription(
+        key="auto_increase_level", translation_key="auto_increase_level",
+        icon="mdi:stairs-up", state_class=SensorStateClass.MEASUREMENT,
+        value=lambda s: s.auto_increase_levels[0],
+    ),
+    CollarSensorDescription(
+        key="auto_increase_min", translation_key="auto_increase_min",
+        icon="mdi:arrow-collapse-down", state_class=SensorStateClass.MEASUREMENT,
+        value=lambda s: s.auto_increase_levels[1],
+    ),
+    CollarSensorDescription(
+        key="auto_increase_max", translation_key="auto_increase_max",
+        icon="mdi:arrow-collapse-up", state_class=SensorStateClass.MEASUREMENT,
+        value=lambda s: s.auto_increase_levels[2],
+    ),
     CollarSensorDescription(
         key="sound_sensitivity", translation_key="sound_sensitivity",
         icon="mdi:microphone", state_class=SensorStateClass.MEASUREMENT,
@@ -87,7 +110,7 @@ SENSORS: tuple[CollarSensorDescription, ...] = (
         key="uptime", translation_key="uptime",
         device_class=SensorDeviceClass.DURATION,
         native_unit_of_measurement=UnitOfTime.SECONDS,
-        # Shown in hours: 34,786.00 s on a tile reads as nothing; 9.7 h reads as a day worn.
+        # Shown in hours: a wear time reads better as 9.7 h than as tens of thousands of seconds.
         suggested_unit_of_measurement=UnitOfTime.HOURS,
         suggested_display_precision=1,
         state_class=SensorStateClass.MEASUREMENT,
@@ -115,13 +138,7 @@ class CollarSensor(PassiveBluetoothCoordinatorEntity[CollarCoordinator], SensorE
         self.entity_description = description
         address = coordinator.device.address
         self._attr_unique_id = f"{address}_{description.key}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, address)},
-            connections={(CONNECTION_BLUETOOTH, address)},
-            manufacturer=MANUFACTURER,
-            model=MODEL,
-            name=f"Dogtra collar {address[-5:].replace(':', '')}",
-        )
+        self._attr_device_info = collar_device_info(address)
 
     @property
     def native_value(self) -> int | str | None:
@@ -130,12 +147,13 @@ class CollarSensor(PassiveBluetoothCoordinatorEntity[CollarCoordinator], SensorE
         return self.entity_description.value(self.coordinator.data)
 
     @property
-    def extra_state_attributes(self) -> dict[str, int] | None:
+    def extra_state_attributes(self) -> dict[str, int | bool] | None:
         # The raw mode code rides on the mode sensor so that a code outside the known set
-        # (Auto Increase has never been captured) is recorded the first time it appears,
-        # instead of being lost behind a disabled diagnostic.
+        # is recorded the first time it appears, instead of being lost behind a disabled
+        # diagnostic; the detection toggles ride with it because they shape what the mode does.
         if self.entity_description.key == "mode" and self.coordinator.data is not None:
-            return {"mode_code": self.coordinator.data.mode_code}
+            data = self.coordinator.data
+            return {"mode_code": data.mode_code, **data.detection}
         return None
 
     @property
@@ -147,8 +165,68 @@ class CollarSensor(PassiveBluetoothCoordinatorEntity[CollarCoordinator], SensorE
         return super().available and self.coordinator.data is not None
 
 
+@dataclass(frozen=True, kw_only=True)
+class ContactSensorDescription(SensorEntityDescription):
+    value: Callable[[PollDiagnostics], datetime | str | None]
+    attributes: Callable[[PollDiagnostics], dict[str, object]]
+
+
+CONTACT_SENSORS: tuple[ContactSensorDescription, ...] = (
+    ContactSensorDescription(
+        # While the collar is present this is as of the last poll; once it goes quiet it is
+        # the final advertisement -- when, how strong, and heard by what.
+        key="last_heard", translation_key="last_heard",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value=lambda d: d.heard_at,
+        attributes=lambda d: {"rssi": d.heard_rssi, "heard_by": d.heard_source},
+    ),
+    ContactSensorDescription(
+        key="last_connect", translation_key="last_connect",
+        device_class=SensorDeviceClass.ENUM,
+        options=[CONNECT_OK, CONNECT_FAILED, CONNECT_SKIPPED],
+        icon="mdi:bluetooth-connect",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value=lambda d: d.connect_result,
+        attributes=lambda d: {
+            "at": d.connect_at,
+            "seconds": d.connect_seconds,
+            "rssi": d.connect_rssi,
+            "through": d.connect_source,
+            "error": d.connect_error,
+        },
+    ),
+)
+
+
+class CollarContactSensor(CollarDiagnosticEntity, SensorEntity):
+    """What was last heard of the collar, or how the last connect went."""
+
+    entity_description: ContactSensorDescription
+
+    def __init__(
+        self, coordinator: CollarCoordinator, description: ContactSensorDescription
+    ) -> None:
+        super().__init__(coordinator, description.key)
+        self.entity_description = description
+
+    @property
+    def native_value(self) -> datetime | str | None:
+        return self.entity_description.value(self.coordinator.diagnostics)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        return self.entity_description.attributes(self.coordinator.diagnostics)
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: CollarConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Create the sensors."""
-    async_add_entities(CollarSensor(entry.runtime_data, d) for d in SENSORS)
+    coordinator = entry.runtime_data
+    async_add_entities(
+        [
+            *(CollarSensor(coordinator, d) for d in SENSORS),
+            *(CollarContactSensor(coordinator, d) for d in CONTACT_SENSORS),
+        ]
+    )

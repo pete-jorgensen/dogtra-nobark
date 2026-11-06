@@ -1,0 +1,21 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit:
+    name: unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install pytest
+      # Needs neither Home Assistant nor Bluetooth: protocol.py is pure, the poll test
+      # fakes the few homeassistant modules coordinator.py imports, and the read-only
+      # guard is a static scan of the shipped package.
+      - run: python -m pytest -q

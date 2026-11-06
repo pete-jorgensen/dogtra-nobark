@@ -1,9 +1,9 @@
 # dogtra-nobark
 
 Home Assistant integration for the **Dogtra SMART NOBARK** bark collar over Bluetooth LE —
-read-only bark, howl and whine counts, battery, correction mode and sensitivities, polled
-through Home Assistant's Bluetooth proxies — plus the documented decode of the collar's
-status frame that makes it possible.
+bark, howl and whine counts, battery and every setting, polled through Home Assistant's
+Bluetooth proxies; the collar's remote buttons (Page, Nick) and its settings as controls —
+plus a description of the collar's Bluetooth protocol.
 
 The vendor app shows these numbers only while a phone is next to the dog. This puts them in
 Home Assistant, where they can be graphed per day, alerted on, and read from any room the
@@ -16,14 +16,32 @@ collar wanders through, as long as a Bluetooth adapter or ESPHome/bt-proxy is wi
 | Barks, Howls, Whines | the collar's own counters (`total_increasing`; the app's Reset starts a new cycle) |
 | Whines and howls | the combined figure the app displays |
 | Battery | percent |
-| Correction mode | Manual / Pager / Count only |
+| Correction mode | Manual / Auto increase / Pager / Count only, with the app's detection toggles as attributes |
 | Correction level | the level set in the app (Manual mode) |
 | Sound sensitivity, Vibration sensitivity | as set in the app |
 | Uptime | the collar's own timer, which the app's Reset also zeroes |
+| Auto increase level / min / max | where Auto Increase has climbed to, and its range, as the app's 1–10 levels |
 
-Everything is **read-only**. The integration never writes to the collar — it delivers
-corrections to a dog, and there is no write path in the code. `tests/test_read_only.py`
-fails the build if one ever appears.
+| Control | What it does |
+| --- | --- |
+| **Page** (button) | vibrates the collar |
+| **Nick** (button) | one short pulse of stimulation, at the *Nick level* |
+| Nick level | 1–100, held in Home Assistant; **never sent above the cap set in the integration's options** (default 20) |
+| Set correction mode | Manual / Auto Increase / Pager / Count only |
+| Set correction level | 1–10, in Manual mode |
+| Set auto increase min / max | 1–10, in Auto Increase mode |
+| Set sound / vibration sensitivity | 1–5 |
+
+The collar delivers corrections to a dog, so the write path is deliberately narrow: one
+function writes, only to the command characteristic, only frames built by `protocol.py`,
+which refuses anything out of range and builds no instruction but the ones listed above.
+`tests/test_write_paths.py` fails the build if a write appears anywhere else. Put Page and
+Nick behind a confirmation on any dashboard (`confirmation:` on the tap action).
+
+A setting shows its new value at once; the collar applies it when the connection closes, so
+the integration reads it back a few seconds later and shows what the collar actually holds.
+About half of Bluetooth connections to the collar fail at the first try; a press that did not
+reach the collar raises an error rather than looking as if it worked.
 
 ## Install
 
@@ -52,17 +70,11 @@ counters are `total_increasing`, so Home Assistant's long-term statistics treat 
 a new cycle and per-day graphs keep their history; the running totals on the entities do
 reset, because the collar's did.
 
-## The status frame
+## The protocol
 
-`docs/frame-format.md` documents the collar's GATT profile and every byte of its 26-byte
-status frame. Battery, mode, correction level, both sensitivities, the h:m:s uptime timer
-and the three 16-bit counters are each confirmed against what the vendor app displayed for
-the same collar at the same time. `scripts/collar_read.py` is a read-only BlueZ tool that
-captures frames from a Linux host with a Bluetooth adapter; `scripts/verify-fields.py`
-re-runs the confirmations over a directory of captures.
-
-Not decoded: the auto-increase intensity table (three raw bytes) and one byte that tracks
-the timer's hours plus seven. Neither is needed for the sensors above.
+`docs/frame-format.md` documents the collar's GATT profile, every byte of its 26-byte status
+frame, and the commands: the 3-byte training frame (page, nick) and the 27-byte settings
+frame. Only byte 19 of the status frame is unmapped.
 
 ## Tests
 
@@ -70,8 +82,10 @@ the timer's hours plus seven. Neither is needed for the sensors above.
 pytest
 ```
 
-`test_protocol.py` feeds captured frames through the parser and asserts the values the app
-showed at the time; `test_read_only.py` proves no write-capable call exists in the package.
+`test_protocol.py` feeds sample status frames through the parser and asserts the decoded
+values; `test_commands.py` checks every command the integration can build and everything it
+refuses; `test_write_paths.py` proves there is exactly one write, to one characteristic;
+`test_polling.py` covers polling and the read-back after a settings change.
 
 ## Licence
 

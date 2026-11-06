@@ -3,7 +3,7 @@
     "flow_title": "{name}",
     "step": {
       "confirm": {
-        "description": "Add {name}?\n\nThis integration only reads the collar's status (bark, howl and whine counts, battery, mode and settings). It never sends a command to the collar."
+        "description": "Add {name}?\n\nThe integration reads the collar's status (bark, howl and whine counts, battery, mode and settings) and can send it commands: Page, Nick, the correction mode, the correction level and the two sensitivities. Nick delivers stimulation to the dog; its level is capped in this integration's options."
       },
       "user": {
         "data": {
@@ -37,7 +37,8 @@
         "state": {
           "manual": "Manual",
           "pager": "Pager",
-          "count_only": "Count only"
+          "count_only": "Count only",
+          "auto_increase": "Auto increase"
         }
       },
       "correction_level": {
@@ -54,6 +55,82 @@
       },
       "status_frame": {
         "name": "Status frame"
+      },
+      "last_heard": {
+        "name": "Last heard"
+      },
+      "last_connect": {
+        "name": "Last connect",
+        "state": {
+          "ok": "OK",
+          "failed": "Failed",
+          "skipped_weak_signal": "Skipped, weak signal"
+        }
+      },
+      "auto_increase_level": {
+        "name": "Auto increase level"
+      },
+      "auto_increase_min": {
+        "name": "Auto increase min"
+      },
+      "auto_increase_max": {
+        "name": "Auto increase max"
+      }
+    },
+    "binary_sensor": {
+      "silent_after_failed_connect": {
+        "name": "Silent after failed connect"
+      }
+    },
+    "button": {
+      "page": {
+        "name": "Page"
+      },
+      "nick": {
+        "name": "Nick"
+      }
+    },
+    "select": {
+      "mode_select": {
+        "name": "Set correction mode",
+        "state": {
+          "manual": "Manual",
+          "pager": "Pager",
+          "count_only": "Count only",
+          "auto_increase": "Auto increase"
+        }
+      }
+    },
+    "number": {
+      "correction_level_set": {
+        "name": "Set correction level"
+      },
+      "sound_sensitivity_set": {
+        "name": "Set sound sensitivity"
+      },
+      "vibration_sensitivity_set": {
+        "name": "Set vibration sensitivity"
+      },
+      "nick_level": {
+        "name": "Nick level"
+      },
+      "auto_increase_min_set": {
+        "name": "Set auto increase min"
+      },
+      "auto_increase_max_set": {
+        "name": "Set auto increase max"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "max_nick_level": "Highest Nick level"
+        },
+        "data_description": {
+          "max_nick_level": "The Nick button never sends more than this, whatever the Nick level is set to (1-100)."
+        }
       }
     }
   }
