@@ -45,13 +45,21 @@ reach the collar raises an error rather than looking as if it worked.
 
 ## Install
 
-1. Copy `custom_components/dogtra_nobark` into your Home Assistant `config/custom_components/`
-   (or add this repository to HACS as a custom repository).
+### From HACS (recommended)
+
+1. Open HACS in Home Assistant.
+2. Search for **Dogtra SMART NOBARK (Bluetooth)** and download it.
+3. Restart Home Assistant.
+4. Go to *Settings → Devices & services* and add the integration. The collar is discovered
+   by its `DOGTRA_*` advertisement name, so it is offered there. If it does not appear, add
+   the integration manually. The collar must be switched on and in range of an adapter or
+   proxy, **and the Dogtra phone app must be closed** (see below).
+
+### Manual copy (alternative)
+
+1. Copy `custom_components/dogtra_nobark` into your Home Assistant `config/custom_components/`.
 2. Restart Home Assistant.
-3. The collar is discovered by its `DOGTRA_*` advertisement name: *Settings → Devices &
-   services* will offer it. If it does not appear, add the integration manually — the
-   collar must be switched on, in range of an adapter or proxy, **and the Dogtra phone app
-   must be closed** (see below).
+3. Add the integration as described in step 4 above.
 
 Works with any adapter Home Assistant's `bluetooth` integration knows, including ESPHome
 Bluetooth proxies. The collar is found through the proxy that hears it best at the moment
